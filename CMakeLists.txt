@@ -33,6 +33,7 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/ccache.cmake")
 configureCcache()
 FindAndSelectClangCompiler()
 
+set(BUILD_MCSEMA_DYNINST_DISASS "1")
 set(MCSEMA_SOURCE_DIR "${PROJECT_SOURCE_DIR}")
 
 option(MCSEMA_ENABLE_RUNTIME "Should runtimes for re-compilation of bitcode be produced?" ON)

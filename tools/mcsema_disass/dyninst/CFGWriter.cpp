@@ -108,31 +108,31 @@ Address TryRetrieveAddrFromStart(ParseAPI::CodeObject &code_object,
 
       auto entry_block = func->entry();
 
-      using Insn = std::map<Offset, InstructionAPI::Instruction::Ptr>;
+      using Insn = std::map<Offset, InstructionAPI::Instruction>;
       Insn instructions;
       entry_block->getInsns(instructions);
       auto call = std::prev(instructions.end(), 1);
 
       // Just some sanity check that we are in correct function
-      if (call->second->getCategory() != InstructionAPI::c_CallInsn &&
-          call->second->getCategory() != InstructionAPI::c_BranchInsn) {
+      if (call->second.getCategory() != InstructionAPI::c_CallInsn &&
+          call->second.getCategory() != InstructionAPI::c_BranchInsn) {
         LOG(WARNING) << "Instruction at 0x" << std::hex << call->first
                      << " is not call nor branching";
         return 0;
       }
 
       auto mov_inst = std::prev(call, 1 + index);
-      auto second_operand = mov_inst->second.get()->getOperand(1);
+      auto second_operand = mov_inst->second.getOperand(1);
 
 
       // in -pie binaries it will be calculated using lea
       // and it generates unintuitive AST
       auto rip = mov_inst->first;
-      if (mov_inst->second->getOperation().getID() == entryID::e_lea) {
-        rip += mov_inst->second->size();
+      if (mov_inst->second.getOperation().getID() == entryID::e_lea) {
+        rip += mov_inst->second.size();
       }
       auto offset = TryEval(second_operand.getValue().get(), rip,
-                            mov_inst->second->size());
+                            mov_inst->second.size());
 
       if (!offset) {
         LOG(WARNING) << "Could not eval basic start addresses!";
@@ -431,9 +431,9 @@ void CFGWriter::SweepStubs() {
     if (section_m.IsInRegions({".plt.got"}, func->entry()->start())) {
       auto inst = func->entry()->getInsn(func->addr());
 
-      if (inst->getCategory() == InstructionAPI::c_BranchInsn) {
-        auto xref_addr = TryEval(inst->getOperand(0).getValue().get(),
-                                 func->addr(), inst->size());
+      if (inst.getCategory() == InstructionAPI::c_BranchInsn) {
+        auto xref_addr = TryEval(inst.getOperand(0).getValue().get(),
+                                 func->addr(), inst.size());
         auto cfg_xref = ctx.data_xrefs.find(*xref_addr);
         if (cfg_xref == ctx.data_xrefs.end()) {
           continue;
@@ -553,7 +553,7 @@ std::set<Address> CFGWriter::WriteBlock(ParseAPI::Block *block,
   cfg_block->set_ea(block->start());
 
 
-  std::map<Offset, InstructionAPI::Instruction::Ptr> instructions;
+  std::map<Offset, InstructionAPI::Instruction> instructions;
   block->getInsns(instructions);
 
   std::set<Address> successors;
@@ -571,8 +571,8 @@ std::set<Address> CFGWriter::WriteBlock(ParseAPI::Block *block,
       auto rip = std::prev(instructions.end())->first;
 
       // Try to compute succ manually, as it can happen that ParseAPI returns -1
-      auto manual = TryEval(last_inst->getOperand(0).getValue().get(), rip,
-                            last_inst->size());
+      auto manual = TryEval(last_inst.getOperand(0).getValue().get(), rip,
+                            last_inst.size());
 
       // We cannot statically tell anything about this edge
       if (!manual && next == -1) {
@@ -617,33 +617,33 @@ std::set<Address> CFGWriter::WriteBlock(ParseAPI::Block *block,
   Address ip = block->start();
 
   for (auto p = instructions.begin(); p != instructions.end();) {
-    InstructionAPI::Instruction *instruction = p->second.get();
-
+    InstructionAPI::Instruction instruction = p->second;
+    //
     WriteInstruction(instruction, ip, cfg_block, (++p) == instructions.end());
-    ip += instruction->size();
+    ip += instruction.size();
   }
 
   ResolveOffsetTable(successors, cfg_block, offset_tables);
   return unresolved_edges;
 }
 
-void CFGWriter::WriteInstruction(InstructionAPI::Instruction *instruction,
-                                 Address addr, mcsema::Block *cfg_block,
+void CFGWriter::WriteInstruction(InstructionAPI::Instruction instruction,
+                                 Dyninst::Address addr, mcsema::Block *cfg_block,
                                  bool is_last) {
 
   mcsema::Instruction *cfg_instruction = cfg_block->add_instructions();
 
   std::string instBytes;
-  for (auto offset = 0U; offset < instruction->size(); ++offset) {
-    instBytes += (int) instruction->rawByte(offset);
+  for (auto offset = 0U; offset < instruction.size(); ++offset) {
+    instBytes += (int) instruction.rawByte(offset);
   }
 
   cfg_instruction->set_ea(addr);
 
   std::vector<InstructionAPI::Operand> operands;
-  instruction->getOperands(operands);
+  instruction.getOperands(operands);
 
-  if (instruction->getCategory() == InstructionAPI::c_CallInsn) {
+  if (instruction.getCategory() == InstructionAPI::c_CallInsn) {
     HandleCallInstruction(instruction, addr, cfg_instruction, is_last);
   } else {
     HandleNonCallInstruction(instruction, addr, cfg_instruction, cfg_block,
@@ -735,14 +735,14 @@ void CFGWriter::CheckDisplacement(Dyninst::InstructionAPI::Expression *expr,
 
 
 //TODO(lukas): This is hacky
-void CFGWriter::HandleCallInstruction(InstructionAPI::Instruction *instruction,
+void CFGWriter::HandleCallInstruction(InstructionAPI::Instruction instruction,
                                       Address addr,
                                       mcsema::Instruction *cfg_instruction,
                                       bool is_last) {
   std::vector<InstructionAPI::Operand> operands;
-  instruction->getOperands(operands);
+  instruction.getOperands(operands);
 
-  Address size = instruction->size();
+  Address size = instruction.size();
 
   auto target = TryEval(operands[0].getValue().get(), addr, size);
   if (!target) {
@@ -828,17 +828,19 @@ bool CFGWriter::HandleXref(mcsema::Instruction *cfg_instruction, Address addr,
 }
 
 void CFGWriter::HandleNonCallInstruction(
-    Dyninst::InstructionAPI::Instruction *instruction, Address addr,
+    Dyninst::InstructionAPI::Instruction instruction, Address addr,
     mcsema::Instruction *cfg_instruction, mcsema::Block *cfg_block,
     bool is_last) {
 
   std::vector<InstructionAPI::Operand> operands;
-  instruction->getOperands(operands);
+  std::cout<<"1"<<operands.size()<<std::endl;
+  instruction.getOperands(operands);
+  std::cout<<"2"<<operands.size()<<std::endl;
 
   // RIP already points to the next instruction
   // Except sometimes DynInst thinks it doesn't
   // and construct an AST with + |instruction|
-  addr += instruction->size();
+  addr += instruction.size();
 
   // Sometimes some .text address is stored somewhere in data segment.
   // That can be function pointer, so we need to check if we actually
@@ -859,7 +861,7 @@ void CFGWriter::HandleNonCallInstruction(
     } else if (auto bf =
                    dynamic_cast<InstructionAPI::BinaryFunction *>(expr.get())) {
 
-      auto instruction_id = instruction->getOperation().getID();
+      auto instruction_id = instruction.getOperation().getID();
       if (instruction_id == entryID::e_lea) {
         if (auto a = TryEval(expr.get(), addr)) {
           HandleXref(cfg_instruction, *a);
@@ -873,10 +875,10 @@ void CFGWriter::HandleNonCallInstruction(
           direct_values[i] = *a;
         }
 
-      } else if (instruction->getCategory() == InstructionAPI::c_BranchInsn) {
+      } else if (instruction.getCategory() == InstructionAPI::c_BranchInsn) {
 
         // This has + |instruction| in AST
-        if (auto a = TryEval(expr.get(), addr - instruction->size())) {
+        if (auto a = TryEval(expr.get(), addr - instruction.size())) {
 
           // ea is not really that important
           // in CrossXref<mcsema::Instruction>
@@ -892,15 +894,16 @@ void CFGWriter::HandleNonCallInstruction(
     ++i;
 
     // If we can get value, it is almost certainly not a displacement
-    if (!TryEval(expr.get(), addr, instruction->size())) {
+    if (!TryEval(expr.get(), addr, instruction.size())) {
       CheckDisplacement(expr.get(), cfg_instruction);
     }
+
   }
 
   // We may be storing some address wich is quite possibly entrypoint of
   // something we should treat as function in cfg
   if (direct_values[0] && direct_values[1]) {
-    addr -= instruction->size();
+    addr -= instruction.size();
     bool is_in_data =
         section_m.IsInRegions({".bss", ".data", ".rodata"}, direct_values[0]);
 
@@ -913,6 +916,7 @@ void CFGWriter::HandleNonCallInstruction(
       }
     }
   }
+  std::cout<<"123"<<operands.size()<<std::endl;
 }
 
 void CFGWriter::WriteExternalFunctions() {

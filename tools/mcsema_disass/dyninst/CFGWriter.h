@@ -64,15 +64,15 @@ class CFGWriter {
              mcsema::Function *cfg_internal_func,
              std::set<Dyninst::ParseAPI::Block *> &written);
 
-  void WriteInstruction(Dyninst::InstructionAPI::Instruction *instruction,
+  void WriteInstruction(Dyninst::InstructionAPI::Instruction instruction,
                         Dyninst::Address addr, mcsema::Block *cfgBlock,
                         bool is_last = false);
-  void HandleCallInstruction(Dyninst::InstructionAPI::Instruction *instruction,
+  void HandleCallInstruction(Dyninst::InstructionAPI::Instruction instruction,
                              Dyninst::Address addr,
                              mcsema::Instruction *cfgInstruction,
                              bool is_last = false);
   void
-  HandleNonCallInstruction(Dyninst::InstructionAPI::Instruction *instruction,
+  HandleNonCallInstruction(Dyninst::InstructionAPI::Instruction instruction,
                            Dyninst::Address addr,
                            mcsema::Instruction *cfgInstruction,
                            mcsema::Block *cfg_block, bool is_last = false);
